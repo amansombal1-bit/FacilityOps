@@ -3,7 +3,7 @@ import { db, serial, audit } from "./db.js";
 import { fm, ensure, unresolved } from "./domain.js";
 import { config } from "./config.js";
 import { createRoot } from "./integrations.js";
-import { limit } from "./auth.js";
+import { limit, passwordDigest } from "./auth.js";
 export function installAdmin(app) {
   app.get("/api/people", async (req, res) =>
     res.json(
@@ -15,7 +15,7 @@ export function installAdmin(app) {
   );
   app.get("/api/users", async (req, res) => {
     fm(req.user);
-    res.json(await db.user.findMany({ orderBy: { name: "asc" } }));
+    res.json(await db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true } }));
   });
   app.post("/api/users", async (req, res) => {
     fm(req.user);
@@ -27,17 +27,33 @@ export function installAdmin(app) {
           .transform((x) => x.toLowerCase().trim()),
         name: z.string().trim().min(2).max(100),
         role: z.enum(["FM", "FOT"]),
+        password: z.string().min(12).max(256),
       })
       .parse(req.body);
+    const { password, ...userData } = d;
+    const passwordHash = await passwordDigest(password);
     const u = await serial(async (tx) => {
-      const u = await tx.user.create({ data: d });
+      const u = await tx.user.create({ data: { ...userData, passwordHash } });
       await audit(tx, req.user.id, "USER_CREATED", null, {
         userId: u.id,
-        ...d,
+        ...userData,
       });
       return u;
     });
-    res.status(201).json(u);
+    res.status(201).json({ id: u.id, email: u.email, name: u.name, role: u.role, active: u.active });
+  });
+  app.post("/api/users/:id/password", async (req, res) => {
+    fm(req.user);
+    const { password } = z.object({ password: z.string().min(12).max(256) }).strict().parse(req.body);
+    const passwordHash = await passwordDigest(password);
+    await serial(async tx => {
+      const user = await tx.user.findUnique({ where: { id: req.params.id } });
+      ensure(user, 404, "User not found");
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+      await tx.session.deleteMany({ where: { userId: user.id } });
+      await audit(tx, req.user.id, "PASSWORD_RESET", null, { userId: user.id });
+    });
+    res.json({ ok: true });
   });
   app.patch("/api/users/:id", async (req, res) => {
     fm(req.user);
