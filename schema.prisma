@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FM
+  FOT
+}
+
+enum Priority {
+  Normal
+  Urgent
+  Critical
+}
+
+enum Status {
+  Open
+  InProgress
+  AwaitingApproval
+  Completed
+  Cancelled
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  role         Role      @default(FOT)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+  tasks        Task[]    @relation("Assigned")
+  createdTasks Task[]    @relation("Created")
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  csrf      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model Otp {
+  email     String   @id
+  digest    String
+  expiresAt DateTime
+  sentAt    DateTime @default(now())
+  attempts  Int      @default(0)
+}
+
+model RateBucket {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+}
+
+model Task {
+  id               String     @id @default(uuid())
+  number           Int        @unique @default(autoincrement())
+  title            String
+  description      String
+  category         String
+  floor            String
+  room             String     @default("")
+  assignedToId     String
+  assignedTo       User       @relation("Assigned", fields: [assignedToId], references: [id])
+  createdById      String
+  createdBy        User       @relation("Created", fields: [createdById], references: [id])
+  priority         Priority   @default(Normal)
+  status           Status     @default(Open)
+  deadline         DateTime
+  beforeRequired   Boolean    @default(false)
+  gpsRequired      Boolean    @default(false)
+  cameraRequired   Boolean    @default(true)
+  correctiveAction String     @default("")
+  resolutionNotes  String     @default("")
+  rejectionReason  String?
+  cycle            Int        @default(1)
+  version          Int        @default(1)
+  approvedById     String?
+  approvedAt       DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  nextReminderAt   DateTime
+  nextEscalationAt DateTime
+  evidence         Evidence[]
+
+  @@index([status, nextReminderAt])
+  @@index([assignedToId, status])
+  @@index([floor, category])
+}
+
+model Evidence {
+  id             String    @id @default(uuid())
+  taskId         String
+  task           Task      @relation(fields: [taskId], references: [id])
+  userId         String
+  cycle          Int
+  kind           String
+  idempotencyKey String    @unique
+  sha256         String
+  bytes          Bytes?
+  size           Int
+  mime           String    @default("image/jpeg")
+  state          String    @default("Pending")
+  driveId        String?   @unique
+  error          String?
+  captureAt      DateTime
+  receivedAt     DateTime  @default(now())
+  latitude       Float?
+  longitude      Float?
+  accuracy       Float?
+  gpsAt          DateTime?
+  source         String
+
+  @@index([taskId, cycle])
+}
+
+model Capture {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  cycle     Int
+  expiresAt DateTime
+  used      Boolean  @default(false)
+}
+
+model Job {
+  id         String    @id @default(uuid())
+  key        String    @unique
+  type       String
+  taskId     String?
+  payload    Json
+  state      String    @default("Pending")
+  attempts   Int       @default(0)
+  runAt      DateTime  @default(now())
+  leaseUntil DateTime?
+  leaseToken String?
+  error      String?
+  createdAt  DateTime  @default(now())
+
+  @@index([state, runAt])
+}
+
+model EmailAttempt {
+  id         String   @id @default(uuid())
+  jobId      String
+  recipient  String
+  result     String
+  providerId String?
+  error      String?
+  createdAt  DateTime @default(now())
+}
+
+model Audit {
+  id        String   @id @default(uuid())
+  actorId   String?
+  taskId    String?
+  action    String
+  details   Json
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+model Settings {
+  id                    String  @id @default("global")
+  escalationHours       Int     @default(6)
+  quietStart            Int?
+  quietEnd              Int?
+  dailySummaryHour      Int     @default(9)
+  evidenceRetentionDays Int     @default(365)
+  driveRootId           String?
+}
+
+model DriveFolder {
+  key     String @id
+  driveId String @unique
+}
