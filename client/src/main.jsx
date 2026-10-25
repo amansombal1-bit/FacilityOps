@@ -243,15 +243,10 @@ function App() {
 }
 function Login({ onLogin }) {
   const [email, setEmail] = useState(""),
-    [otp, setOtp] = useState(""),
-    [sent, setSent] = useState(false),
-    [cooldown, setCooldown] = useState(0),
+    [password, setPassword] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (cooldown) {
-      const t = setTimeout(() => setCooldown(cooldown - 1), 1000);
-      return () => clearTimeout(t);
+  return () => clearTimeout(t);
     }
   }, [cooldown]);
   const request = async () => {
@@ -303,11 +298,10 @@ function Login({ onLogin }) {
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              if (!sent) return request();
               setBusy(true);
               setError("");
               try {
-                await api("/auth/verify", "POST", { email, otp });
+                await api("/auth/login", "POST", { email, password });
                 await onLogin();
               } catch (e) {
                 setError(e.message);
@@ -322,59 +316,18 @@ function Login({ onLogin }) {
               required
               autoComplete="email"
               value={email}
-              disabled={sent}
               onChange={(e) => setEmail(e.target.value)}
             />
-            {sent && (
-              <>
-                <p role="status">
-                  If your account is active, a code will arrive shortly. It
-                  expires in five minutes.
-                </p>
-                <Field
-                  label="Six-digit verification code"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  required
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                />
-              </>
-            )}
+            <Field label="Password" type="password" autoComplete="current-password"
+              required value={password} onChange={(e) => setPassword(e.target.value)} />
             {error && (
               <p role="alert" className="error">
                 {error}
               </p>
             )}
             <button disabled={busy} className="primary full">
-              {busy
-                ? "Please wait…"
-                : sent
-                  ? "Verify & sign in →"
-                  : "Send sign-in code →"}
+              {busy ? "Signing in…" : "Sign in →"}
             </button>
-            {sent && (
-              <div className="row">
-                <button
-                  type="button"
-                  disabled={cooldown > 0 || busy}
-                  onClick={request}
-                >
-                  {cooldown ? `Resend in ${cooldown}s` : "Resend code"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSent(false);
-                    setOtp("");
-                  }}
-                >
-                  Change email
-                </button>
-              </div>
-            )}
           </form>
           <p className="secure-note">
             ◈ Private workspace · Access is managed by your FM.
@@ -1221,7 +1174,9 @@ function Capture({ task, kind, act }) {
 }
 function Team({ act, revision }) {
   const [users, error] = useData("/users", revision),
-    [d, setD] = useState({ name: "", email: "", role: "FOT" });
+    [d, setD] = useState({ name: "", email: "", role: "FOT", password: "" }),
+    [resetId, setResetId] = useState(""),
+    [resetPassword, setResetPassword] = useState("");
   return (
     <section className="card">
       <h2>Team & access</h2>
@@ -1237,7 +1192,7 @@ function Team({ act, revision }) {
             () => api("/users", "POST", d),
             "Team member added",
           );
-          if (r) setD({ name: "", email: "", role: "FOT" });
+          if (r) setD({ name: "", email: "", role: "FOT", password: "" });
         }}
       >
         <Field
@@ -1253,6 +1208,9 @@ function Team({ act, revision }) {
           value={d.email}
           onChange={(e) => setD({ ...d, email: e.target.value })}
         />
+        <Field label="Initial password" type="password" minLength={12} maxLength={256}
+          required autoComplete="new-password" value={d.password}
+          onChange={(e) => setD({ ...d, password: e.target.value })} />
         <Field label="Role">
           <select
             value={d.role}
@@ -1265,6 +1223,19 @@ function Team({ act, revision }) {
         <button className="primary">Add user</button>
       </form>
       {error && <p className="error">{error}</p>}
+      {resetId && (
+        <form className="inline-form" onSubmit={async e => {
+          e.preventDefault();
+          const result = await act(() => api("/users/" + resetId + "/password", "POST", { password: resetPassword }), "Password changed; sessions revoked");
+          if (result) { setResetId(""); setResetPassword(""); }
+        }}>
+          <Field label="New password (minimum 12 characters)" type="password"
+            autoComplete="new-password" minLength={12} maxLength={256} required
+            value={resetPassword} onChange={e => setResetPassword(e.target.value)} />
+          <button className="primary">Save password</button>
+          <button type="button" onClick={() => setResetId("")}>Cancel</button>
+        </form>
+      )}
       <div className="table-scroll">
         <table>
           <thead>
@@ -1299,6 +1270,9 @@ function Team({ act, revision }) {
                   </select>
                 </td>
                 <td>
+                  <button type="button" onClick={() => { setResetId(u.id); setResetPassword(""); }}>
+                    Set password
+                  </button>{" "}
                   <button
                     onClick={() =>
                       act(
