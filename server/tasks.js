@@ -331,12 +331,12 @@ export function installTasks(app) {
         bytes = await s
           .rotate()
           .resize({
-            width: 2400,
-            height: 2400,
+            width: 1280,
+            height: 1280,
             fit: "inside",
             withoutEnlargement: true,
           })
-          .jpeg({ quality: 85 })
+          .jpeg({ quality: 75 })
           .toBuffer();
       } catch {
         ensure(false, 400, "Invalid image or excessive image dimensions");
@@ -457,6 +457,16 @@ export function installTasks(app) {
         });
       });
       res.status(202).json(e);
+      // Opportunistic processing starts as soon as the upload is accepted.
+      // Scheduled worker remains necessary for reliable retries after restarts.
+      setImmediate(async () => {
+        try {
+          const { drain } = await import("./worker.js");
+          await drain(5);
+        } catch (err) {
+          req.log.error({ code: err.code, message: err.message }, "Immediate photo processing failed");
+        }
+      });
     },
   );
   app.get("/api/evidence/:id/photo", async (req, res) => {

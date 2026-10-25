@@ -1001,6 +1001,20 @@ function TaskDetail({ id, me, act, revision, back }) {
     </>
   );
 }
+async function optimizeEvidencePhoto(blob) {
+  if (!blob) throw new Error("No photo captured");
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error("Image conversion failed")), "image/jpeg", 0.72)
+    );
+  } finally { bitmap.close(); }
+}
 function Capture({ task, kind, act }) {
   const video = useRef(),
     stream = useRef(),
@@ -1055,8 +1069,10 @@ function Capture({ task, kind, act }) {
           ),
         );
       }
+      setMessage("Optimizing photo for faster upload…");
+      const optimized = await optimizeEvidencePhoto(blob);
       const fd = new FormData();
-      fd.append("photo", blob, "capture.jpg");
+      fd.append("photo", optimized, "capture.jpg");
       Object.entries({
         kind,
         idempotencyKey: crypto.randomUUID(),
@@ -1102,10 +1118,11 @@ function Capture({ task, kind, act }) {
               const v = video.current;
               if (!v.videoWidth) return;
               const c = document.createElement("canvas");
-              c.width = v.videoWidth;
-              c.height = v.videoHeight;
+              const ratio = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+              c.width = Math.round(v.videoWidth * ratio);
+              c.height = Math.round(v.videoHeight * ratio);
               c.getContext("2d").drawImage(v, 0, 0);
-              c.toBlob((b) => upload(b, "camera"), "image/jpeg", 0.9);
+              c.toBlob((b) => b && upload(b, "camera"), "image/jpeg", 0.72);
             }}
           >
             ● Capture & upload
