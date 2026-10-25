@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.local/
+.test-db/
+*.log
+playwright-report/
+test-results/
+.google-oauth-secret.json

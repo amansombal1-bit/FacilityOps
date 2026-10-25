@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.*
+.local
+.test-db
+tests
+test-results
+playwright-report
+.git
+*.zip
+.google-oauth-secret.json
