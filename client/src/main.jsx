@@ -246,22 +246,6 @@ function Login({ onLogin }) {
     [password, setPassword] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
-  return () => clearTimeout(t);
-    }
-  }, [cooldown]);
-  const request = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      await api("/auth/request", "POST", { email });
-      setSent(true);
-      setCooldown(60);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
     <div className="login">
       <section className="login-story">
