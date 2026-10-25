@@ -211,7 +211,7 @@ function App() {
           </div>
         )}
         {creating ? (
-          <TaskForm act={act} onDone={() => setCreating(false)} />
+          <TaskForm me={me} act={act} onDone={() => setCreating(false)} />
         ) : selected ? (
           <TaskDetail
             id={selected}
@@ -592,7 +592,7 @@ function TaskWorkspace({ page, me, revision, open, act }) {
     </>
   );
 }
-function TaskForm({ act, onDone, task }) {
+function TaskForm({ me, act, onDone, task }) {
   const [people] = useData("/people");
   const [busy, setBusy] = useState(false);
   const [d, setD] = useState(
@@ -680,13 +680,14 @@ function TaskForm({ act, onDone, task }) {
               onChange={(e) => field(k, e.target.value)}
             />
           ))}
-          <Field label="Assigned FOT">
+          <Field label="Assign task to">
             <select
               required
               value={d.assignedToId}
               onChange={(e) => field("assignedToId", e.target.value)}
             >
               <option value="">Choose a team member</option>
+              {me?.role === "FM" && <option value={me.id}>Myself ({me.name})</option>}
               {people
                 ?.filter((p) => p.role === "FOT")
                 .map((p) => (
@@ -759,7 +760,7 @@ function TaskDetail({ id, me, act, revision, back }) {
   if (error) return <p className="error">{error}</p>;
   if (!t) return <p>Loading task…</p>;
   if (edit)
-    return <TaskForm task={t} act={act} onDone={() => setEdit(false)} />;
+    return <TaskForm me={me} task={t} act={act} onDone={() => setEdit(false)} />;
   const own = t.assignedToId === me.id;
   const change = async (name, data = {}) => {
     setBusy(true);

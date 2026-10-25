@@ -146,7 +146,7 @@ export function installTasks(app) {
     );
     const t = await serial(async (tx) => {
       const u = await tx.user.findUnique({ where: { id: d.assignedToId } });
-      ensure(u?.active && u.role === "FOT", 400, "Choose an active FOT");
+      ensure(u?.active && (u.role === "FOT" || (u.role === "FM" && u.id === req.user.id)), 400, "Choose an active FOT or yourself");
       const settings = await tx.settings.findUnique({
         where: { id: "global" },
       });
